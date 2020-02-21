@@ -69,22 +69,27 @@ def run_ddpg(amodel, cmodel, train_indicator=0, seeded=1337, track_name='practgt
 
     if not train_indicator:
         # Now load the weight
-        logging.info("Now we load the weight")
+        #logging.info("Now we load the weight")
+        print("Now we load the weight")
         try:
             actor.model.load_weights(amodel)
             critic.model.load_weights(cmodel)
             actor.target_model.load_weights(amodel)
             critic.target_model.load_weights(cmodel)
-            logging.info(" Weight load successfully")
+            #logging.info(" Weight load successfully")
+            print("Weight load successfully")
         except:
-            logging.info("Cannot find the weight")
+            #ogging.info("Cannot find the weight")
+            print("Cannot find the weight")
             exit()
 
-    logging.info("TORCS Experiment Start.")
+    #logging.info("TORCS Experiment Start.")
+    print("TORCS Experiment Start.")
     best_lap = 500
 
     for i_episode in range(episode_count):
-        logging.info("Episode : " + str(i_episode) + " Replay Buffer " + str(buff.count()))
+        print("Episode : " + str(i_episode) + " Replay Buffer " + str(buff.count()))
+        #logging.info("Episode : " + str(i_episode) + " Replay Buffer " + str(buff.count()))
         if np.mod(i_episode, 3) == 0:
             ob = env.reset(relaunch=True)  # relaunch TORCS every 3 episode because of the memory leak error
         else:
@@ -145,6 +150,8 @@ def run_ddpg(amodel, cmodel, train_indicator=0, seeded=1337, track_name='practgt
             total_reward += r_t
             s_t = s_t1
 
+            print("Episode", i_episode, "Step", step, "Action", a_t, "Reward", r_t, "Loss", loss)
+
             if np.mod(step, 1000) == 0:
                 logging.info("Episode {}, Distance {}, Last Lap {}".format(
                     i_episode, ob.distRaced, ob.lastLapTime))
@@ -161,6 +168,11 @@ def run_ddpg(amodel, cmodel, train_indicator=0, seeded=1337, track_name='practgt
                 logging.info("Now we save model")
                 actor.model.save_weights("ddpg_actor_weights_periodic.h5", overwrite=True)
                 critic.model.save_weights("ddpg_critic_weights_periodic.h5", overwrite=True)
+
+        print("TOTAL REWARD @ " + str(i_episode) +"-th Episode  : Reward " + str(total_reward))
+        print("Total Step: " + str(step))
+        print("Best Lap {}".format(best_lap))
+        print("")
         logging.info("TOTAL REWARD @ " + str(i_episode) + "-th Episode  : Reward " + str(total_reward))
         logging.info("Best Lap {}".format(best_lap))
     env.end()  # This is for shutting down TORCS

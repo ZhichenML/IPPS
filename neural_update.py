@@ -19,6 +19,9 @@ import functools
 import copy
 from utils import *
 
+import os
+import pickle
+
 
 class FunctionOU(object):
     def function(self, x, mu, theta, sigma):
@@ -49,6 +52,97 @@ class NeuralAgent():
         self.buff = ReplayBuffer(BUFFER_SIZE)  # Create replay buffer
         self.track_name = track_name
 
+        self.save = dict(total_reward=[],
+                         total_step=[],
+                         ave_reward=[],
+                         distRaced=[],
+                         distFromStart=[],
+                         lastLapTime=[],
+                         curLapTime=[],
+                         lapTimes=[],
+                         avelapTime=[],
+                         ave_sp=[],
+                         max_sp=[],
+                         min_sp=[],
+                         test_total_reward=[],
+                         test_total_step=[],
+                         test_ave_reward=[],
+                         test_distRaced=[],
+                         test_distFromStart=[],
+                         test_lastLapTime=[],
+                         test_curLapTime=[],
+                         test_lapTimes = [],
+                         test_avelapTime=[],
+                         test_ave_sp=[],
+                         test_max_sp=[],
+                         test_min_sp=[]
+                         )
+
+    def rollout(self, env):
+        max_steps = 10000
+
+        vision = False
+
+        # zhichen: it is not stable to have two torcs env and UDP connections
+        # env = TorcsEnv(vision=vision, throttle=True, gear_change=False, track_name=self.track_name)
+
+        ob = env.reset(relaunch=True)
+        s_t = np.hstack(
+            (ob.speedX, ob.angle, ob.trackPos, ob.speedY, ob.speedZ, ob.rpm, ob.wheelSpinVel / 100.0, ob.track))
+
+        total_reward = 0.
+
+        sp = []
+
+        lastLapTime = []
+
+        for j_iter in range(max_steps):
+
+            a_t = self.actor.model.predict(s_t.reshape(1, s_t.shape[0]))
+            a_t = a_t[0]
+            # print('test a_t:', a_t)
+            a_t[0]= clip(a_t[0], -1, 1)
+            a_t[1]= clip(a_t[1], 0, 1)
+            a_t[2]= clip(a_t[2], 0, 1)
+
+            ob, r_t, done, info = env.step(a_t)
+
+            sp.append(info['speed'])
+
+            if lastLapTime == []:
+                if info['lastLapTime']>0:
+                    lastLapTime.append(info['lastLapTime'])
+            elif info['lastLapTime']>0 and lastLapTime[-1] != info['lastLapTime']:
+                lastLapTime.append(info['lastLapTime'])
+
+            if np.mod(j_iter +1,20) == 0:
+                logging.info('step: ' + str(j_iter+1))
+                print('\n ob: ', ob)
+
+            s_t = np.hstack(
+                (ob.speedX, ob.angle, ob.trackPos, ob.speedY, ob.speedZ, ob.rpm, ob.wheelSpinVel / 100.0, ob.track))
+
+            total_reward += r_t
+
+
+            if done: break
+
+        logging.info("Test Episode Reward: " + str(total_reward) +
+                     " Episode Length: " + str(j_iter+1) + " Ave Reward: " + str(total_reward/(j_iter+1)) +
+                     "\n Distance: " + str(info['distRaced']) + ' ' + str(info['distFromStart']) +
+                     "\n Last Lap Times: " + str(info['lastLapTime']) + " Cur Lap Times: " + str(info['curLapTime']) + " lastLaptime: " + str(lastLapTime) +
+                     "\n ave sp: " + str(np.mean(sp)) + " max sp: " + str(np.max(sp)) )
+            #logging.info(" Total Steps: " + str(step) + " " + str(i_episode) + "-th Episode Reward: " + str(total_reward) +
+            #            " Episode Length: " + str(j_iter+1) + "  Distance" + str(ob.distRaced) + " Lap Times: " + str(ob.lastLapTime))
+
+        #env.end()  # This is for shutting down TORCS
+
+        ave_sp = np.mean(sp)
+        max_sp = np.max(sp)
+        min_sp = np.min(sp)
+
+        return total_reward, j_iter+1, info, ave_sp, max_sp, min_sp, lastLapTime
+
     def update_neural(self, controllers, episode_count=200, tree=False):
         OU = FunctionOU()
         vision = False
@@ -78,8 +172,10 @@ class NeuralAgent():
         for i_episode in range(episode_count):
             logging.info("Episode : " + str(i_episode) + " Replay Buffer " + str(self.buff.count()))
             if np.mod(i_episode, 3) == 0:
+                logging.info('relaunch TORCS')
                 ob = env.reset(relaunch=True)  # relaunch TORCS every 3 episode because of the memory leak error
             else:
+                logging.info('reset TORCS')
                 ob = env.reset()
 
             #[ob.speedX, ob.angle, ob.trackPos, ob.speedY, ob.speedZ, ob.rpm, list(ob.wheelSpinVel / 100.0), list(ob.track)]
@@ -91,6 +187,9 @@ class NeuralAgent():
                        list(ob.wheelSpinVel / 100.0), list(ob.track), [0, 0, 0]]
             window_list = [tempObs[:] for _ in range(window)]
 
+            sp = []
+
+            lastLapTime = []
 
             for j_iter in range(max_steps):
                 if tree:
@@ -118,7 +217,7 @@ class NeuralAgent():
                 a_t_original = self.actor.model.predict(s_t.reshape(1, s_t.shape[0]))
                 noise_t[0][0] = max(epsilon, 0) * OU.function(a_t_original[0][0], 0.0, 0.60, 0.30)
                 noise_t[0][1] = max(epsilon, 0) * OU.function(a_t_original[0][1], 0.5, 1.00, 0.10)
-                noise_t[0][2] = max(epsilon, 0) * OU.function(a_t_original[0][2], -0.1, 1.00, 0.05)
+                noise_t[0][2] = max(epsilon, 0) * OU.function(a_t_original[0][2], 0, 1.00, 0.05)
 
                 a_t[0][0] = a_t_original[0][0] + noise_t[0][0]
                 a_t[0][1] = a_t_original[0][1] + noise_t[0][1]
@@ -127,6 +226,14 @@ class NeuralAgent():
                 mixed_act = [a_t[0][k_iter] / (1 + self.lambda_mix) + (self.lambda_mix / (1 + self.lambda_mix)) * action_prior[k_iter] for k_iter in range(3)]
 
                 ob, r_t, done, info = env.step(mixed_act)
+
+                sp.append(info['speed'])
+
+                if lastLapTime == []:
+                    if info['lastLapTime']>0:
+                        lastLapTime.append(info['lastLapTime'])
+                elif info['lastLapTime']>0 and lastLapTime[-1] != info['lastLapTime']:
+                    lastLapTime.append(info['lastLapTime'])
 
                 s_t1 = np.hstack(
                     (ob.speedX, ob.angle, ob.trackPos, ob.speedY, ob.speedZ, ob.rpm, ob.wheelSpinVel / 100.0, ob.track))
@@ -140,7 +247,7 @@ class NeuralAgent():
                 rewards = np.asarray([e[2] for e in batch])
                 new_states = np.asarray([e[3] for e in batch])
                 dones = np.asarray([e[4] for e in batch])
-                y_t = np.asarray([e[1] for e in batch])
+                y_t = np.zeros((states.shape[0],1))
 
                 target_q_values = self.critic.target_model.predict([new_states, self.actor.target_model.predict(new_states)])
 
@@ -175,30 +282,120 @@ class NeuralAgent():
                 step += 1
                 if done:
                     break
-            else:
-                env.end()
+
+
+
+            #else:
+            #    env.end()
+
+
             self.lambda_mix = np.mean(lambda_store)
-            logging.info("#### Episode Reward: " + str(total_reward))
-            logging.info("####### Episode Length: " + str(j_iter))
-            logging.info("########## Lap Times: " + str(ob.lastLapTime))
-            logging.info("### Lambda Mix: " + str(self.lambda_mix))
-            logging.info("#### Total Steps: " + str(step))
-            logging.info("TOTAL REWARD @ " + str(i_episode) + "-th Episode  : Reward " + str(total_reward))
-            logging.info("Total Step: " + str(j_iter) + "  Distance" + str(ob.distRaced))
+
+
+            logging.info('Episode ends! \n' +
+                         "Total Steps: " + str(step) + " " + str(i_episode) + "-th Episode Reward: " + str(total_reward) +
+                         " Episode Length: " + str(j_iter+1) + " Ave Reward: " + str(total_reward/(j_iter+1)) +
+                         "\n Distance: " + str(info['distRaced']) + ' ' + str(info['distFromStart']) +
+                         "\n Last Lap Times: " + str(info['lastLapTime']) + " Cur Lap Times: " + str(info['curLapTime']) + " lastLaptime: " + str(lastLapTime) +
+                         "\n ave sp: " + str(np.mean(sp)) + " max sp: " + str(np.max(sp)) )
+
+            #logging.info(" Lambda Mix: " + str(self.lambda_mix))
+
+            self.save['total_reward'].append(total_reward)
+            self.save['total_step'].append(j_iter+1)
+            self.save['ave_reward'].append(total_reward/(j_iter+1))
+
+            self.save['distRaced'].append(info['distRaced'])
+            self.save['distFromStart'].append(info['distFromStart'])
+
+            self.save['lastLapTime'].append(info['lastLapTime'])
+            self.save['curLapTime'].append(info['curLapTime'])
+            self.save['lapTimes'].append(lastLapTime)
+            if lastLapTime == []:
+                self.save['avelapTime'].append(0)
+            else:
+                self.save['avelapTime'].append(np.mean(lastLapTime))
+
+            self.save['ave_sp'].append(np.mean(sp))
+            self.save['max_sp'].append(np.max(sp))
+            self.save['min_sp'].append(np.min(sp))
+
+            # test
+            if np.mod(i_episode+1, 10) == 0:
+                logging.info("Start Testing!")
+                test_total_reward, test_step, test_info, test_ave_sp, test_max_sp, test_min_sp, test_lastLapTime = self.rollout(env)
+                self.save['test_total_reward'].append(test_total_reward)
+                self.save['test_total_step'].append(test_step)
+                self.save['test_ave_reward'].append(test_total_reward/test_step)
+
+                self.save['test_distRaced'].append(test_info['distRaced'])
+                self.save['test_distFromStart'].append(test_info['distFromStart'])
+
+                self.save['test_lastLapTime'].append(test_info['lastLapTime'])
+                self.save['test_curLapTime'].append(test_info['curLapTime'])
+                self.save['test_lapTimes'].append(test_lastLapTime)
+
+                if test_lastLapTime == []:
+                    self.save['test_avelapTime'].append(0)
+                else:
+                    self.save['test_avelapTime'].append(np.mean(test_lastLapTime))
+
+                self.save['test_ave_sp'].append(test_ave_sp)
+                self.save['test_max_sp'].append(test_max_sp)
+                self.save['test_min_sp'].append(test_min_sp)
+
+
+
+            if np.mod(i_episode+1, 5) == 0:
+                print("Now we save model")
+                #os.remove("actormodel.h5")
+                self.actor.model.save_weights("actormodel_"+str(seed)+".h5", overwrite=True)
+                with open("actormodel.json", "w") as outfile:
+                    json.dump(self.actor.model.to_json(), outfile)
+
+                #os.remove("criticmodel.h5")
+                self.critic.model.save_weights("criticmodel_"+str(seed)+".h5", overwrite=True)
+                with open("criticmodel.json", "w") as outfile:
+                    json.dump(self.critic.model.to_json(), outfile)
+
+
+                filename = "./model/actormodel_"+str(seed)+'_'+str(i_episode+1)+".h5"
+                dirname = os.path.dirname(filename)
+                if not os.path.exists(dirname):
+                    os.makedirs(dirname)
+                self.actor.model.save_weights(filename, overwrite=True)
+                filename = "./model/criticmodel_"+str(seed)+'_'+str(i_episode+1)+".h5"
+                dirname = os.path.dirname(filename)
+                if not os.path.exists(dirname):
+                    os.makedirs(dirname)
+                self.critic.model.save_weights(filename, overwrite=True)
+
+
+            if np.mod(i_episode+1, 10) == 0:
+                filename = "./Fig/iprl_save_" + str(seed)
+                dirname = os.path.dirname(filename)
+                if not os.path.exists(dirname):
+                    os.makedirs(dirname)
+                with open(filename,'wb') as f:
+                    pickle.dump(self.save, f)
+
+            if i_episode>1000 and all(np.array(self.save['total_reward'][-20:])<20):
+                print('model degenerated. Stop at Epsisode '+ str(i_episode))
+                break
+
+
         env.end()  # This is for shutting down TORCS
-        logging.info("Finish.")
+        logging.info("Neural Policy Update Finish.")
         return None
 
     def collect_data(self, controllers, tree=False):
-        OU = FunctionOU()
+
         vision = False
-        GAMMA = 0.99
-        EXPLORE = 100000.
+
         max_steps = 10000
-        reward = 0
-        done = False
+
         step = 0
-        epsilon = 1
+
 
         if not tree:
             steer_prog, accel_prog, brake_prog = controllers
@@ -206,6 +403,8 @@ class NeuralAgent():
 
         # Generate a Torcs environment
         env = TorcsEnv(vision=vision, throttle=True, gear_change=False, track_name=self.track_name)
+        ob = env.reset(relaunch=True)
+        print("S0=", ob)
 
         window = 5
         lambda_store = np.zeros((max_steps, 1))
@@ -213,7 +412,7 @@ class NeuralAgent():
         factor = 0.8
 
         logging.info("TORCS Collection started with Lambda = " + str(self.lambda_mix))
-        ob = env.reset(relaunch=True)
+
 
         s_t = np.hstack(
             (ob.speedX, ob.angle, ob.trackPos, ob.speedY, ob.speedZ, ob.rpm, ob.wheelSpinVel / 100.0, ob.track))
@@ -225,6 +424,9 @@ class NeuralAgent():
 
         observation_list = []
         actions_list = []
+
+        lastLapTime = []
+        sp =[]
 
         for j_iter in range(max_steps):
             if tree:
@@ -245,8 +447,7 @@ class NeuralAgent():
             window_list.pop(0)
             window_list.append(tempObs[:])
 
-            loss = 0
-            epsilon -= 1.0 / EXPLORE
+
             a_t = self.actor.model.predict(s_t.reshape(1, s_t.shape[0]))
             mixed_act = [a_t[0][k_iter] / (1 + self.lambda_mix) + (self.lambda_mix / (1 + self.lambda_mix)) * action_prior[k_iter] for k_iter in range(3)]
             if tree:
@@ -257,36 +458,37 @@ class NeuralAgent():
             actions_list.append(mixed_act[:])
             ob, r_t, done, info = env.step(mixed_act)
 
+            sp.append(info['speed'])
+
+            if lastLapTime == []:
+                if info['lastLapTime']>0:
+                    lastLapTime.append(info['lastLapTime'])
+            elif info['lastLapTime']>0 and lastLapTime[-1] != info['lastLapTime']:
+                lastLapTime.append(info['lastLapTime'])
+
+
             s_t1 = np.hstack(
                 (ob.speedX, ob.angle, ob.trackPos, ob.speedY, ob.speedZ, ob.rpm, ob.wheelSpinVel / 100.0, ob.track))
 
-            self.buff.add(s_t, a_t[0], r_t, s_t1, done)  # Add replay buffer
 
-            # Do the batch update
-            batch = self.buff.getBatch(self.batch_size)
-            states = np.asarray([e[0] for e in batch])
-            actions = np.asarray([e[1] for e in batch])
-            rewards = np.asarray([e[2] for e in batch])
-            new_states = np.asarray([e[3] for e in batch])
-            dones = np.asarray([e[4] for e in batch])
-            y_t = np.asarray([e[1] for e in batch])
 
-            target_q_values = self.critic.target_model.predict([new_states, self.actor.target_model.predict(new_states)])
-
-            for k in range(len(batch)):
-                if dones[k]:
-                    y_t[k] = rewards[k]
-                else:
-                    y_t[k] = rewards[k] + GAMMA * target_q_values[k]
 
             total_reward += r_t
             s_t = s_t1
-            if np.mod(step, 2000) == 0:
-                logging.info(" Distance " + str(ob.distRaced) + " Lap Times " + str(ob.lastLapTime))
+            #if np.mod(step, 2000) == 0:
+            #    logging.info(" Distance " + str(ob.distRaced) + " Lap Times " + str(ob.lastLapTime))
 
             step += 1
             if done:
                 break
+
+        logging.info("Data Collection Finished!")
+        logging.info('Episode ends! \n' +
+                      "Episode Reward: " + str(total_reward) +
+                     " Episode Length: " + str(j_iter+1) + " Ave Reward: " + str(total_reward/(j_iter+1)) +
+                     "\n Distance: " + str(info['distRaced']) + ' ' + str(info['distFromStart']) +
+                     "\n Last Lap Times: " + str(info['lastLapTime']) + " Cur Lap Times: " + str(info['curLapTime']) + " lastLaptime: " + str(lastLapTime) +
+                     "\n ave sp: " + str(np.mean(sp)) + " max sp: " + str(np.max(sp)) )
         env.end()
 
         return observation_list, actions_list

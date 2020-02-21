@@ -56,20 +56,30 @@ class ParameterFinder():
         return bo_pid.res['max']
 
 
-def programmatic_game(steer, accel, brake, track_name='practgt2.xml'):
-    episode_count = 2
-    max_steps = 100000
+def programmatic_game(steer, accel, brake, track_name='practice.xml'):
+    episode_count = 1
+    max_steps = 10000
     window = 5
 
     # Generate a Torcs environment
     env = TorcsEnv(vision=False, throttle=True, gear_change=False, track_name=track_name)
 
     logging.info("TORCS Experiment Start with Priors on " + track_name)
+
+    observation_list = []
+    actions_list = []
+
     for i_episode in range(episode_count):
-        ob = env.reset(relaunch=True)  # relaunch TORCS every 3 episode because of the memory leak error
+        ob = env.reset(relaunch=True)
         tempObs = [[ob.speedX], [ob.angle], [ob.trackPos], [ob.speedY], [ob.speedZ], [ob.rpm],
                    list(ob.wheelSpinVel / 100.0), list(ob.track), [0, 0, 0]]
         window_list = [tempObs[:] for _ in range(window)]
+
+        total_reward = 0
+        sp = []
+        lastLapTime = []
+
+
 
         for j in range(max_steps):
             steer_action = clip_to_range(steer.pid_execute(window_list), -1, 1)
@@ -77,21 +87,43 @@ def programmatic_game(steer, accel, brake, track_name='practgt2.xml'):
             brake_action = clip_to_range(brake.pid_execute(window_list), 0, 1)
             action_prior = [steer_action, accel_action, brake_action]
 
+
+            observation_list.append(window_list[:])
+            actions_list.append(action_prior) #(mixed_act[:])
+
+
             tempObs = [[ob.speedX], [ob.angle], [ob.trackPos], [ob.speedY], [ob.speedZ], [ob.rpm],
                        list(ob.wheelSpinVel / 100.0), list(ob.track), action_prior]
             window_list.pop(0)
             window_list.append(tempObs[:])
 
             ob, r_t, done, info = env.step(action_prior)
-            if np.mod(j, 1000) == 0:
-                logging.info("Episode " + str(i_episode) + " Distance " + str(ob.distRaced) + " Lap Times " + str(ob.lastLapTime))
+            #if np.mod(j, 1000) == 0:
+
+            total_reward += r_t
+            sp.append(info['speed'])
+
+            if lastLapTime == []:
+                if info['lastLapTime']>0:
+                    lastLapTime.append(info['lastLapTime'])
+            elif info['lastLapTime']>0 and lastLapTime[-1] != info['lastLapTime']:
+                lastLapTime.append(info['lastLapTime'])
 
             if done:
                 print('Done. Steps: ', j)
                 break
 
+        #logging.info("Episode: " + str(i_episode) + " step: " + str(j+1) + " Distance: " + str(ob.distRaced) + ' ' + str(ob.distFromStart) + " Lap Times: " + str(ob.lastLapTime))
+        logging.info(" step: " + str(j+1) + " " + str(i_episode) + "-th Episode Reward: " + str(total_reward) +
+                         " Ave Reward: " + str(total_reward/(j+1)) +
+                         "\n Distance: " + str(info['distRaced']) + ' ' + str(info['distFromStart']) +
+                         "\n Last Lap Times: " + str(info['lastLapTime']) + " Cur Lap Times: " + str(info['curLapTime']) + " lastLaptime: " + str(lastLapTime) +
+                         "\n ave sp: " + str(np.mean(sp)) + " max sp: " + str(np.max(sp)) )
+
         env.end()  # This is for shutting down TORCS
         logging.info("Finish.")
+
+    return observation_list, actions_list
 
 
 

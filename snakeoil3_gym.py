@@ -66,7 +66,7 @@ data_size = 2**17
 # Initialize help messages
 ophelp=  'Options:\n'
 ophelp+= ' --host, -H <host>    TORCS server host. [localhost]\n'
-ophelp+= ' --port, -p <port>    TORCS port. [3001]\n'
+ophelp+= ' --port, -p <port>    TORCS port. [3101]\n'
 ophelp+= ' --id, -i <id>        ID for server. [SCR]\n'
 ophelp+= ' --steps, -m <#>      Maximum simulation steps. 1 sec ~ 50 steps. [100000]\n'
 ophelp+= ' --episodes, -e <#>   Maximum learning episodes. [1]\n'
@@ -117,19 +117,19 @@ def bargraph(x,mn,mx,w,c='X'):
     return '[%s]' % (nnc+npc+ppc+pnc)
 
 class Client():
-    def __init__(self, H=None, p=None, i=None, e=None, t=None, s=None, d=None, vision=False, track_name='practiceregcg.xml'):
+    def __init__(self, H=None, p=None, i=None, e=None, t=None, s=None, d=None, vision=False, track_name='practice.xml'):
         # If you don't like the option defaults,  change them here.
         self.track_name = track_name
         self.vision = vision
 
         self.host= 'localhost'
-        self.port= 3001
+        self.port= 3101
         self.sid= 'SCR'
         self.maxEpisodes=1 # "Maximum number of learning episodes to perform"
         self.trackname= 'unknown'
         self.stage= 3 # 0=Warm-up, 1=Qualifying 2=Race, 3=unknown <Default=3>
         self.debug= False
-        self.maxSteps= 100000  # 50steps/second
+        self.maxSteps= 10000  # 50steps/second
         #self.parse_the_command_line()
         if H: self.host= H
         if p: self.port= p
@@ -147,12 +147,12 @@ class Client():
         try:
             self.so= socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         except socket.error as emsg:
-            print('Error: Could not create socket...')
+            logging.info('Error: Could not create socket...')
             sys.exit(-1)
         # == Initialize Connection To Server ==
         self.so.settimeout(1)
 
-        n_fail = 1
+        n_fail = 2
         while True:
             # This string establishes track sensor angles! You can customize them.
             a= "-45 -19 -12 -7 -4 -2.5 -1.7 -1 -.5 0 .5 1 1.7 2.5 4 7 12 19 45"
@@ -164,32 +164,32 @@ class Client():
             except socket.error as emsg:
                 print('failed here')
                 sys.exit(-1)
-            sockdata= str()
+            sockdata= str() # str()
             try:
                 sockdata,addr= self.so.recvfrom(data_size)
                 sockdata = sockdata.decode('utf-8')
             except socket.error as emsg:
-                print("Waiting for server on %d............" % self.port)
-                print("Count Down : " + str(n_fail))
+                logging.info("Waiting for server on %d............" % self.port)
+                logging.info("Count Down : " + str(n_fail))
                 if n_fail < 0:
-                    print("relaunch torcs")
+                    logging.info("relaunch torcs")
                     os.system('pkill torcs')
                     time.sleep(1.0)
                     if self.vision is False:
-                        config_string = 'torcs -s -r /usr/local/share/games/torcs/config/raceman/' + self.track_name + ' -nofuel -nodamage -nolaptime &'
-                        os.system(config_string)
-                        # os.system('torcs -s -r /usr/local/share/games/torcs/config/raceman/practiceregcg.xml -nofuel -nodamage -nolaptime &')
+                        os.system('torcs -s -r /usr/local/share/games/torcs/config/raceman/' + self.track_name + ' -T -nofuel -nodamage -nolaptime &')
                     else:
                         config_string = 'torcs -s -r /usr/local/share/games/torcs/config/raceman/' + self.track_name + ' -nofuel -nodamage -nolaptime -vision &'
                         os.system(config_string)
-                    #time.sleep(1.0)
-                    #os.system('sh autostart.sh')
-                    n_fail = 1
+                    time.sleep(1.0)
+                    os.system('sh autostart.sh')
+                    time.sleep(1.0)
+
+                    n_fail = 2
                 n_fail -= 1
 
             identify = '***identified***'
             if identify in sockdata:
-                print("Client connected on %d.............." % self.port)
+                logging.info("Client connected on %d.............." % self.port)
                 break
 
     def parse_the_command_line(self):
@@ -236,7 +236,7 @@ class Client():
     def get_servers_input(self):
         '''Server's input is stored in a ServerState object'''
         if not self.so: return
-        sockdata= str()
+        sockdata= str() # str()
 
         while True:
             try:
@@ -244,30 +244,33 @@ class Client():
                 sockdata,addr= self.so.recvfrom(data_size)
                 sockdata = sockdata.decode('utf-8')
             except socket.error as emsg:
-                print('.', end=' ')
+                logging.info('.e')
+                print(socket.error)
+                #return # ???????????
                 #print "Waiting for data on %d.............." % self.port
             if '***identified***' in sockdata:
-                print("Client connected on %d.............." % self.port)
+                logging.info("Client connected on %d.............." % self.port)
                 continue
             elif '***shutdown***' in sockdata:
-                print((("Server has stopped the race on %d. "+
+                logging.info((("Server has stopped the race on %d. "+
                         "You were in %d place.") %
                         (self.port,self.S.d['racePos'])))
                 self.shutdown()
                 return
             elif '***restart***' in sockdata:
                 # What do I do here?
-                print("Server has restarted the race on %d." % self.port)
+                logging.info("Server has restarted the race on %d." % self.port)
                 # I haven't actually caught the server doing this.
                 self.shutdown()
                 return
             elif not sockdata: # Empty?
+                logging.info('Empty sockdata')
                 continue       # Try again.
             else:
                 self.S.parse_server_str(sockdata)
                 if self.debug:
                     sys.stderr.write("\x1b[2J\x1b[H") # Clear for steady output.
-                    print(self.S)
+                    logging.info(self.S)
                 break # Can now return from this function.
 
     def respond_to_server(self):
@@ -276,17 +279,17 @@ class Client():
             message = repr(self.R)
             self.so.sendto(message.encode(), (self.host, self.port))
         except socket.error as emsg:
-            print("Error sending to server: %s Message %s" % (emsg[1],str(emsg[0])))
+            logging.info("Error sending to server: %s Message %s" % (emsg[1],str(emsg[0])))
             sys.exit(-1)
         if self.debug: print(self.R.fancyout())
         # Or use this for plain output:
         #if self.debug: print self.R
 
+    # zhichen: close UCP connection
     def shutdown(self):
         if not self.so: return
-        logging.info("############# Lap from Snake: " + str(self.S.d['lastLapTime']))
-        logging.info("######### Dist from Snake: " + str(self.S.d['distRaced']))
-        print(("Race terminated or %d steps elapsed. Shutting down %d."
+        #logging.info("######### Lap from Snake: " + str(self.S.d['lastLapTime']) + " Dist from Snake: " + str(self.S.d['distRaced']))
+        logging.info(("Race terminated or %d steps elapsed. Shutting down %d."
                % (self.maxSteps,self.port)))
         self.so.close()
         self.R.d['meta'] = 1
@@ -296,7 +299,7 @@ class Client():
 class ServerState():
     '''What the server is reporting right now.'''
     def __init__(self):
-        self.servstr= str()
+        self.servstr= str() # str()
         self.d= dict()
 
     def parse_server_str(self, server_string):
@@ -324,7 +327,7 @@ class ServerState():
         '''Specialty output for useful ServerState monitoring.'''
         out= str()
         sensors= [ # Select the ones you want in the order you want them.
-        #'curLapTime',
+        'curLapTime',
         'lastLapTime',
         'stucktimer',
         #'damage',
@@ -561,7 +564,7 @@ def drive_example(c):
 
 # ================ MAIN ================
 if __name__ == "__main__":
-    C= Client(p=3001)
+    C= Client(p=3101)
     for step in range(C.maxSteps,0,-1):
         C.get_servers_input()
         drive_example(C)

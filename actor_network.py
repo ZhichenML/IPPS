@@ -7,6 +7,7 @@ from keras.layers import Dense, Flatten, Input, merge, Lambda
 from keras.optimizers import Adam
 import tensorflow as tf
 import keras.backend as K
+import logging
 
 HIDDEN1_UNITS = 300
 HIDDEN2_UNITS = 600
@@ -43,7 +44,7 @@ class ActorNetwork(object):
         self.target_model.set_weights(actor_target_weights)
 
     def create_actor_network(self, state_size,action_dim):
-        print("Now we build the model")
+        logging.info("Now we build the actor model")
         S = Input(shape=[state_size])   
         h0 = Dense(HIDDEN1_UNITS, activation='relu')(S)
         h1 = Dense(HIDDEN2_UNITS, activation='relu')(h0)

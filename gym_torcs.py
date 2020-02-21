@@ -12,12 +12,12 @@ import logging
 #try
 class TorcsEnv:
     terminal_judge_start = 100  # If after 100 timestep still no progress, terminated
-    termination_limit_progress = 0  # [km/h], episode terminates if car is running slower than this limit
+    termination_limit_progress = 5  # [km/h], episode terminates if car is running slower than this limit
     default_speed = 50
 
     initial_reset = True
 
-    def __init__(self, vision=False, throttle=False, gear_change=False, track_name='practiceregcg.xml'):
+    def __init__(self, vision=False, throttle=False, gear_change=False, track_name='practice.xml'):
         self.track_name = track_name
         self.vision = vision
         self.throttle = throttle
@@ -27,16 +27,23 @@ class TorcsEnv:
 
         os.system('pkill torcs')
         time.sleep(0.5)
+        logging.info('Init TORCS Environment')
         if self.vision is True:
             config_string = 'torcs -s -r /usr/local/share/games/torcs/config/raceman/' + self.track_name + ' -nofuel -nodamage -nolaptime -vision &'
             os.system(config_string)
         else:
-            config_string = 'torcs -s -r /usr/local/share/games/torcs/config/raceman/' + self.track_name + ' -nofuel &'
-            os.system(config_string)
+            #config_string = 'torcs -s -r /usr/local/share/games/torcs/config/raceman/' + self.track_name + ' -T -nofuel &'
+            os.system('torcs -s -r /usr/local/share/games/torcs/config/raceman/' + self.track_name + ' -T -nofuel -nodamage -nolaptime &')
+            #os.system('torcs -T -nofuel &')
+
+        time.sleep(0.5)
+        os.system('sh autostart.sh')
+        time.sleep(0.5)
+        #os.system(config_string)
 
         """
         # Modify here if you use multiple tracks in the environment
-        self.client = snakeoil3.Client(p=3001, vision=self.vision)  # Open new UDP in vtorcs
+        self.client = snakeoil3.Client(p=3101, vision=self.vision)  # Open new UDP in vtorcs
         self.client.MAX_STEPS = np.inf
 
         client = self.client
@@ -53,6 +60,14 @@ class TorcsEnv:
         high = np.array([np.inf for _ in range(30)])
         self.observation_space = spaces.Box(low=-high, high=high)
 
+        #if vision is False:
+        #    high = np.array([1., np.inf, np.inf, np.inf, 1., np.inf, 1., np.inf])
+        #    low = np.array([0., -np.inf, -np.inf, -np.inf, 0., -np.inf, 0., -np.inf])
+        #    self.observation_space = spaces.Box(low=low, high=high)
+        #else:
+        #    high = np.array([1., np.inf, np.inf, np.inf, 1., np.inf, 1., np.inf, 255])
+        #    low = np.array([0., -np.inf, -np.inf, -np.inf, 0., -np.inf
+
 
     def step(self, u):
         client = self.client
@@ -63,7 +78,7 @@ class TorcsEnv:
         action_torcs = client.R.d
 
         # Steering
-        action_torcs['steer'] = this_action['steer']  # in [-1, 1]
+        client.R.d['steer'] = this_action['steer']  # in [-1, 1]
 
         #  Simple Autnmatic Throttle Control by Snakeoil
         if self.throttle is False:
@@ -82,35 +97,35 @@ class TorcsEnv:
             # Traction Control System
             if ((client.S.d['wheelSpinVel'][2]+client.S.d['wheelSpinVel'][3]) -
                (client.S.d['wheelSpinVel'][0]+client.S.d['wheelSpinVel'][1]) > 5):
-                action_torcs['accel'] -= .2
+                client.R.d['accel'] -= .2
         else:
-            action_torcs['accel'] = this_action['accel']
-            action_torcs['brake'] = this_action['brake']
+            client.R.d['accel'] = this_action['accel']
+            client.R.d['brake'] = this_action['brake']
 
         #  Automatic Gear Change by Snakeoil
         if self.gear_change is True:
-            action_torcs['gear'] = this_action['gear']
+            client.R.d['gear'] = this_action['gear']
         else:
             #  Automatic Gear Change by Snakeoil is possible
-            action_torcs['gear'] = 1
+            client.R.d['gear'] = 1
             if self.throttle:
                 if client.S.d['speedX'] > 50:
-                    action_torcs['gear'] = 2
+                    client.R.d['gear'] = 2
                 if client.S.d['speedX'] > 80:
-                    action_torcs['gear'] = 3
+                    client.R.d['gear'] = 3
                 if client.S.d['speedX'] > 110:
-                    action_torcs['gear'] = 4
+                    client.R.d['gear'] = 4
                 if client.S.d['speedX'] > 140:
-                    action_torcs['gear'] = 5
+                    client.R.d['gear'] = 5
                 if client.S.d['speedX'] > 170:
-                    action_torcs['gear'] = 6
+                    client.R.d['gear'] = 6
         # Save the privious full-obs from torcs for the reward calculation
         obs_pre = copy.deepcopy(client.S.d)
 
         # One-Step Dynamics Update #################################
-        # Apply the Agent's action into torcs
+        # Apply the Agent's action into torcs,  zhichen: send R.d
         client.respond_to_server()
-        # Get the response of TORCS
+        # Get the response of TORCS,  zhichen: set S.d
         client.get_servers_input()
 
         # Get the current full-observation from torcs
@@ -118,6 +133,7 @@ class TorcsEnv:
 
         # Make an obsevation from a raw observation vector from TORCS
         self.observation = self.make_observaton(obs)
+        observation_next = self.observation
 
         # Reward setting Here #######################################
         # direction-dependent positive reward
@@ -141,7 +157,7 @@ class TorcsEnv:
         episode_terminate = False
 
         if self.terminal_judge_start < self.time_step:
-            if abs(trackPos) > 2.7:  # Episode is terminated if the car is out of track
+            if abs(track.any()) > 1 or abs(trackPos) > 2.7:  # Episode is terminated if the car is out of track
                 print('Out of Track', track.any(), trackPos)
                 reward = -200
                 episode_terminate = True
@@ -150,36 +166,39 @@ class TorcsEnv:
         if self.terminal_judge_start < self.time_step: # Episode terminates if the progress of agent is small
             if sp < self.termination_limit_progress:
                 print('No progress', progress, sp)
-                reward = -2
+                reward = -100
                 episode_terminate = True
                 client.R.d['meta'] = True
 
-        if np.cos(obs['angle']) < -0.5: # Episode is terminated if the agent runs backward
-            print('Running Backward')
-            reward = -200
-            episode_terminate = True
-            client.R.d['meta'] = True
+        #if np.cos(obs['angle']) < -0.5: # Episode is terminated if the agent runs backward
+        #    print('Running Backward')
+        #    reward = -1
+        #    episode_terminate = True
+        #    client.R.d['meta'] = True
 
         if np.cos(obs['angle']) < 0: # Episode is terminated if the agent runs backward
             print('Running Backward')
+            reward = -100
             episode_terminate = True
             client.R.d['meta'] = True
 
 
+        info = {}
+        info['distRaced'] = observation_next.distRaced
+        info['distFromStart'] = observation_next.distFromStart
+        info['lastLapTime'] = observation_next.lastLapTime
+        info['curLapTime'] = observation_next.curLapTime
+        info['speed'] = sp
+
         if client.R.d['meta'] is True: # Send a reset signal
             self.initial_run = False
-            client.shutdown()
-            print("Resetting Torcs")
-            logging.info("##### Lap from gym: " + str(obs['lastLapTime']))
-            logging.info("###### Distance from gym: " + str(obs['distRaced']))
-            logging.info("######## Steps: " + str(self.time_step))
-            self.reset()
-            #client.respond_to_server()
+            client.respond_to_server() # zhichen: send meta signal
 
         self.time_step += 1
 
-        return self.get_obs(), reward, client.R.d['meta'], {}
+        return observation_next, reward, client.R.d['meta'], info #self.get_obs()
 
+    # zhichen: relaunch torcs env and rebuild client-server connection
     def reset(self, relaunch=False):
         self.time_step = 0
 
@@ -190,14 +209,18 @@ class TorcsEnv:
             ## TENTATIVE. Restarting TORCS every episode suffers the memory leak bug!
             if relaunch is True:
                 self.reset_torcs()
-                print("### TORCS is RELAUNCHED ###")
+                logging.info("### TORCS is RELAUNCHED ###")
 
         # Modify here if you use multiple tracks in the environment
-        self.client = snakeoil3.Client(p=3001, vision=self.vision, track_name=self.track_name)  # Open new UDP in vtorcs
+
+        # self.client.shutdown()
+        self.client = snakeoil3.Client(p=3101, vision=self.vision, track_name=self.track_name) #   # Open new UDP in vtorcs
         self.client.MAX_STEPS = np.inf
 
         client = self.client
         client.get_servers_input()  # Get the initial input from torcs
+
+        logging.info('Successfully reset S')
 
         obs = client.S.d  # Get the current full-observation from torcs
         self.observation = self.make_observaton(obs)
@@ -206,6 +229,7 @@ class TorcsEnv:
 
         self.initial_reset = False
         return self.get_obs()
+
 
     def end(self):
         os.system('pkill torcs')
@@ -221,8 +245,12 @@ class TorcsEnv:
             config_string = 'torcs -s -r /usr/local/share/games/torcs/config/raceman/' + self.track_name + ' -nofuel -nodamage -nolaptime -vision &'
             os.system(config_string)
         else:
-            config_string = 'torcs -s -r /usr/local/share/games/torcs/config/raceman/' + self.track_name + ' -nofuel &'
-            os.system(config_string)
+            os.system('torcs -s -r /usr/local/share/games/torcs/config/raceman/' + self.track_name + ' -T -nofuel -nodamage -nolaptime &')
+            time.sleep(0.5)
+            os.system('sh autostart.sh')
+            time.sleep(0.5)
+            #config_string = 'torcs -s -r /usr/local/share/games/torcs/config/raceman/' + self.track_name + ' -T -nofuel &'
+            #os.system(config_string)
 
     def agent_to_torcs(self, u):
         torcs_action = {'steer': u[0]}
@@ -254,7 +282,8 @@ class TorcsEnv:
             names = ['speedX', 'speedY', 'speedZ', 'angle', 'rpm',
                      'track',
                      'trackPos',
-                     'wheelSpinVel', 'lastLapTime', 'distRaced']
+                     'wheelSpinVel', 'lastLapTime', 'curLapTime','distRaced', 'distFromStart']
+                     #'distFromStartLine']
             Observation = col.namedtuple('Observaion', names)
             return Observation(speedX=np.array(raw_obs['speedX'], dtype=np.float32)/300.0,
                                speedY=np.array(raw_obs['speedY'], dtype=np.float32)/300.0,
@@ -265,7 +294,9 @@ class TorcsEnv:
                                trackPos=np.array(raw_obs['trackPos'], dtype=np.float32)/1.,
                                wheelSpinVel=np.array(raw_obs['wheelSpinVel'], dtype=np.float32),
                                lastLapTime=np.array(raw_obs['lastLapTime'], dtype=np.float32)/1.0,
-                               distRaced=np.array(raw_obs['distRaced'], dtype=np.float32)/1.0)
+                               curLapTime=np.array(raw_obs['curLapTime'], dtype=np.float32)/1.0,
+                               distRaced=np.array(raw_obs['distRaced'], dtype=np.float32)/1.0,
+                               distFromStart=np.array(raw_obs['distFromStart'], dtype=np.float32)/1.0)
         else:
             names = ['focus',
                      'speedX', 'speedY', 'speedZ', 'angle',
