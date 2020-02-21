@@ -40,7 +40,7 @@ class NeuralAgent():
         LRC = 0.001  # Lerning rate for Critic
         state_dim = 29  # of sensors input
         self.batch_size = 32
-        self.lambda_mix = 10.0
+        self.lambda_mix = 1.0
         self.action_dim = 3  # Steering/Acceleration/Brake
 
 
