@@ -46,13 +46,13 @@ class ParameterFinder():
         return diff_total
 
     def pid_parameters(self, info_list):
-        gp_params = {"alpha": 1e-5, "n_restarts_optimizer": 10}  # Optimizer configuration
+        gp_params = {"alpha": 1e-4, "n_restarts_optimizer": 1}  # Optimizer configuration
         logging.info('Optimizing Controller')
         bo_pid = BayesianOptimization(self.find_distance_paras,
                                         {'sp0': info_list[0][0], 'sp1': info_list[0][1], 'sp2': info_list[0][2], 'spt': info_list[0][3],
                                          'ap0': info_list[1][0], 'ap1': info_list[1][1], 'ap2': info_list[1][2], 'apt': info_list[1][3], 'api': info_list[1][4], 'apc': info_list[1][5],
                                          'bp0': info_list[2][0], 'bp1': info_list[2][1], 'bp2': info_list[2][2], 'bpt': info_list[2][3]}, verbose=0)
-        bo_pid.maximize(init_points=50, n_iter=100, kappa=5, **gp_params)
+        bo_pid.maximize(init_points=5, n_iter=10, kappa=5, **gp_params)
         return bo_pid.res['max']
 
 
@@ -127,7 +127,7 @@ def programmatic_game(steer, accel, brake, track_name='practice.xml'):
 
 
 
-def learn_policy(track_name):
+def learn_policy(track_name, seed):
 
     # Define Pi_0
     steer_prog = Controller([0.97, 0.05, 49.98], 0, 2, 0)
@@ -143,9 +143,9 @@ def learn_policy(track_name):
         logging.info("Iteration {}".format(i_iter))
         # Learn/Update Neural Policy
         if i_iter == 0:
-            nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=200)
+            nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=20, seed=seed)
         else:
-            nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=100)
+            nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=5, seed=seed)
 
         # Collect Trajectories
         observation_list, action_list = nn_agent.collect_data([steer_prog, accel_prog, brake_prog])
@@ -179,7 +179,7 @@ def learn_policy(track_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--trackfile', default='practgt2.xml')
+    parser.add_argument('--trackfile', default='practice.xml')
     parser.add_argument('--seed', default=None)
     parser.add_argument('--logname', default='AdaptiveProgramIPPG_')
     args = parser.parse_args()
@@ -195,4 +195,4 @@ if __name__ == "__main__":
             logging.StreamHandler(sys.stdout)
         ])
     logging.info("Logging started with level: INFO")
-    learn_policy(track_name=args.trackfile)
+    learn_policy(track_name=args.trackfile, seed = args.seed)

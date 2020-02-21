@@ -143,7 +143,7 @@ class NeuralAgent():
 
         return total_reward, j_iter+1, info, ave_sp, max_sp, min_sp, lastLapTime
 
-    def update_neural(self, controllers, episode_count=200, tree=False):
+    def update_neural(self, controllers, episode_count=200, tree=False, seed=1337):
         OU = FunctionOU()
         vision = False
         GAMMA = 0.99
