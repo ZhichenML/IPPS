@@ -40,7 +40,7 @@ class ParameterFinder():
             accel_acts.append(clip_to_range(self.accel.pid_execute(window_list), 0, 1))
             brake_acts.append(clip_to_range(self.brake.pid_execute(window_list), 0, 1))
         print('steer_acts: ',steer_acts)
-        print('actions: ',self.actions)
+        print('actions: ',np.array(self.actions)[:, 0])
         steer_diff = spatial.distance.euclidean(steer_acts, np.array(self.actions)[:, 0])
         accel_diff = spatial.distance.euclidean(accel_acts, np.array(self.actions)[:, 1])
         brake_diff = spatial.distance.euclidean(brake_acts, np.array(self.actions)[:, 2])
