@@ -145,7 +145,7 @@ def learn_policy(track_name, seed):
         logging.info("Iteration {}".format(i_iter))
         # Learn/Update Neural Policy
         if i_iter == 0:
-            nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=20, seed=seed)
+            nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=10, seed=seed)
         else:
             nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=5, seed=seed)
 
@@ -173,6 +173,7 @@ def learn_policy(track_name, seed):
         brake_ranges.append(create_interval(brake_prog.pid_info()[1], 0.001))
 
         pid_ranges = [steer_ranges, accel_ranges, brake_ranges]
+        print(pid_ranges)
         new_paras = param_finder.pid_parameters(pid_ranges)
 
         steer_prog.update_parameters([new_paras['max_params'][i] for i in ['sp0', 'sp1', 'sp2']], new_paras['max_params']['spt'])
