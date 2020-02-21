@@ -39,6 +39,25 @@ class ParameterFinder():
             steer_acts.append(clip_to_range(self.steer.pid_execute(window_list), -1, 1))
             accel_acts.append(clip_to_range(self.accel.pid_execute(window_list), 0, 1))
             brake_acts.append(clip_to_range(self.brake.pid_execute(window_list), 0, 1))
+        print('steer_acts: ',steer_acts)
+        print('actions: ',self.actions)
+        steer_diff = spatial.distance.euclidean(steer_acts, np.array(self.actions)[:, 0])
+        accel_diff = spatial.distance.euclidean(accel_acts, np.array(self.actions)[:, 1])
+        brake_diff = spatial.distance.euclidean(brake_acts, np.array(self.actions)[:, 2])
+        diff_total = -(steer_diff + accel_diff + brake_diff)/float(len(self.actions))
+        return diff_total
+
+    def find_distance_paras(self, sp0, sp1, sp2, spt, ap0, ap1, ap2, apt, api, apc, bp0, bp1, bp2, bpt):
+        self.steer.update_parameters([sp0, sp1, sp2], spt)
+        self.accel.update_parameters([ap0, ap1, ap2], apt, api, apc)
+        self.brake.update_parameters([bp0, bp1, bp2], bpt)
+        steer_acts = []
+        accel_acts = []
+        brake_acts = []
+        for window_list in self.inputs:
+            steer_acts.append(clip_to_range(self.steer.pid_execute(window_list), -1, 1))
+            accel_acts.append(clip_to_range(self.accel.pid_execute(window_list), 0, 1))
+            brake_acts.append(clip_to_range(self.brake.pid_execute(window_list), 0, 1))
         steer_diff = spatial.distance.euclidean(steer_acts, np.array(self.actions)[:, 0])
         accel_diff = spatial.distance.euclidean(accel_acts, np.array(self.actions)[:, 1])
         brake_diff = spatial.distance.euclidean(brake_acts, np.array(self.actions)[:, 2])
@@ -173,7 +192,7 @@ def learn_policy(track_name, seed):
         brake_ranges.append(create_interval(brake_prog.pid_info()[1], 0.001))
 
         pid_ranges = [steer_ranges, accel_ranges, brake_ranges]
-        print(pid_ranges)
+        logging.info(pid_ranges)
         new_paras = param_finder.pid_parameters(pid_ranges)
 
         steer_prog.update_parameters([new_paras['max_params'][i] for i in ['sp0', 'sp1', 'sp2']], new_paras['max_params']['spt'])
@@ -200,10 +219,11 @@ if __name__ == "__main__":
 
     random.seed(args.seed)
     logPath = 'logs'
-    logFileName = args.logname + args.trackfile[:-4]
+    now = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime(time.time()))
+    logFileName = args.logname + args.trackfile[:-4] + str(args.seed) + now
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s",
+        format="%(asctime)s [%(threadName)-12.12s] %(module)s  %(funcName)s %(lineno)d [%(levelname)-5.5s]  %(message)s",
         handlers=[
             logging.FileHandler("{0}/{1}.log".format(logPath, logFileName)),
             logging.StreamHandler(sys.stdout)
