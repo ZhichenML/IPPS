@@ -53,7 +53,9 @@ class ParameterFinder():
                                          'ap0': info_list[1][0], 'ap1': info_list[1][1], 'ap2': info_list[1][2], 'apt': info_list[1][3], 'api': info_list[1][4], 'apc': info_list[1][5],
                                          'bp0': info_list[2][0], 'bp1': info_list[2][1], 'bp2': info_list[2][2], 'bpt': info_list[2][3]}, verbose=0)
         bo_pid.maximize(init_points=5, n_iter=10, kappa=5, **gp_params)
-        return bo_pid.res['max']
+        logging.info(bo_pid.max['params'])
+        logging.info(bo_pid.max['target'])
+        return bo_pid.max['params']
 
 
 def programmatic_game(steer, accel, brake, track_name='practice.xml'):
@@ -169,6 +171,7 @@ def learn_policy(track_name, seed):
 
         brake_ranges = [create_interval(brake_prog.pid_info()[0][const], 0.05) for const in range(3)]
         brake_ranges.append(create_interval(brake_prog.pid_info()[1], 0.001))
+
         pid_ranges = [steer_ranges, accel_ranges, brake_ranges]
         new_paras = param_finder.pid_parameters(pid_ranges)
 
