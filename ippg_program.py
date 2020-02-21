@@ -147,7 +147,7 @@ def learn_policy(track_name, seed):
         logging.info("Iteration {}".format(i_iter))
         # Learn/Update Neural Policy
         if i_iter == 0:
-            nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=10, seed=seed)
+            nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=2, seed=seed)
         else:
             nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=5, seed=seed)
 
@@ -155,7 +155,7 @@ def learn_policy(track_name, seed):
         observation_list, action_list = nn_agent.collect_data([steer_prog, accel_prog, brake_prog])
         all_observations += observation_list
         # Relabel Observations
-        all_actions = nn_agent.label_data([steer_prog, accel_prog, brake_prog], all_observations)
+        _,_, all_actions = nn_agent.label_data([steer_prog, accel_prog, brake_prog], all_observations)
 
         # Learn new programmatic policy
         param_finder = ParameterFinder(all_observations, all_actions, steer_prog, accel_prog, brake_prog)
