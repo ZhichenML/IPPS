@@ -1,0 +1,13 @@
+To generate results for the DDPG, IPPG_Program and IPPG_Tree algorithms run ddpg.py, ippg_program.py and ippg_tree.py respectively. The results from the TORCS simulator are output as .log files. Installation files and instructions for the TORCS simulator can be found at: <http://torcs.sourceforge.net/index.php?name=Sections&op=viewarticle&artid=3>
+
+Description of files:
+    (1) actor_network.py - Contains the class for the neural actor.
+    (2) controller.py - Contains the class for the programmatic controller.
+    (3) critic_network.py - Contains the class for the neural critic.
+    (4) ddpg.py - Runs the DDPG algorithm.
+    (5) gym_torcs.py - Python wrapper of TORCS to provide an OpenAI-gym-like interface.
+    (6) ippg_program.py - Runs IPPG_Program algorithm
+    (7) ippg_tree.py - Runs IPPG_Tree algorithm
+    (8) neural_update.py - Provides classes for updating the neural components of mixed policies.
+    (9) replay_buffer.py - Create/utilize the replay buffer for the DDPG algorithm.
+    (10) snakeoil3_gym.py - Python script to communicate with TORCS simulator.
