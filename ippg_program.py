@@ -156,9 +156,9 @@ def learn_policy(track_name, seed):
         # Learn new programmatic policy
         param_finder = ParameterFinder(all_observations, all_actions, steer_prog, accel_prog, brake_prog)
 
-        steer_ranges = [tuple([create_interval(steer_prog.pid_info[0][const], 0.05) for const in range(3)]), create_interval(steer_prog.pid_info[1], 0.01)]
-        accel_ranges = [tuple([create_interval(accel_prog.pid_info[0][const], 0.05) for const in range(3)]), create_interval(accel_prog.pid_info[1], 0.5), create_interval(accel_prog.pid_info[2], 0.1), create_interval(accel_prog.pid_info[3], 0.01)]
-        brake_ranges = [tuple([create_interval(brake_prog.pid_info[0][const], 0.05) for const in range(3)]), create_interval(brake_prog.pid_info[1], 0.001)]
+        steer_ranges = [[create_interval(steer_prog.pid_info[0][const], 0.05) for const in range(3)], create_interval(steer_prog.pid_info[1], 0.01)]
+        accel_ranges = [[create_interval(accel_prog.pid_info[0][const], 0.05) for const in range(3)], create_interval(accel_prog.pid_info[1], 0.5), create_interval(accel_prog.pid_info[2], 0.1), create_interval(accel_prog.pid_info[3], 0.01)]
+        brake_ranges = [[create_interval(brake_prog.pid_info[0][const], 0.05) for const in range(3)], create_interval(brake_prog.pid_info[1], 0.001)]
         pid_ranges = [steer_ranges, accel_ranges, brake_ranges]
         new_paras = param_finder.pid_parameters(pid_ranges)
 
