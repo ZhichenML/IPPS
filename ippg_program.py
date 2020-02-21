@@ -39,8 +39,8 @@ class ParameterFinder():
             steer_acts.append(clip_to_range(self.steer.pid_execute(window_list), -1, 1))
             accel_acts.append(clip_to_range(self.accel.pid_execute(window_list), 0, 1))
             brake_acts.append(clip_to_range(self.brake.pid_execute(window_list), 0, 1))
-        print('steer_acts: ',steer_acts)
-        print('actions: ',np.array(self.actions)[:, 0])
+        #print('steer_acts: ',steer_acts)
+        #print('actions: ',np.array(self.actions)[:, 0])
         steer_diff = spatial.distance.euclidean(steer_acts, np.array(self.actions)[:, 0])
         accel_diff = spatial.distance.euclidean(accel_acts, np.array(self.actions)[:, 1])
         brake_diff = spatial.distance.euclidean(brake_acts, np.array(self.actions)[:, 2])
@@ -48,7 +48,7 @@ class ParameterFinder():
         return diff_total
 
     def pid_parameters(self, info_list):
-        gp_params = {"alpha": 1e-4, "n_restarts_optimizer": 1}  # Optimizer configuration
+        gp_params = {"alpha": 1e-5, "n_restarts_optimizer": 5}  # Optimizer configuration
         logging.info('Optimizing Controller')
         bo_pid = BayesianOptimization(self.find_distance_paras,
                                         {'sp0': info_list[0][0], 'sp1': info_list[0][1], 'sp2': info_list[0][2], 'spt': info_list[0][3],
@@ -124,14 +124,30 @@ def programmatic_game(steer, accel, brake, track_name='practice.xml'):
                          "\n Last Lap Times: " + str(info['lastLapTime']) + " Cur Lap Times: " + str(info['curLapTime']) + " lastLaptime: " + str(lastLapTime) +
                          "\n ave sp: " + str(np.mean(sp)) + " max sp: " + str(np.max(sp)) )
 
+        if lastLapTime == []:
+            avelapTime=0
+        else:
+            avelapTime=np.mean(lastLapTime)
+
         env.end()  # This is for shutting down TORCS
         logging.info("Finish.")
 
-    return observation_list, actions_list
+    return observation_list, actions_list, total_reward, j+1, total_reward/(j+1), info['distRaced'], lastLapTime, avelapTime, np.mean(sp), np.max(sp), np.min(sp)
 
 
 
 def learn_policy(track_name, seed):
+
+    Program_save = dict(total_reward=[],
+                         total_step=[],
+                         ave_reward=[],
+                         distRaced=[],
+                         lapTimes=[],
+                         avelapTime=[],
+                         ave_sp=[],
+                         max_sp=[],
+                         min_sp=[],
+                         )
 
     # Define Pi_0
     steer_prog = Controller([0.97, 0.05, 49.98], 0, 2, 0)
@@ -143,13 +159,23 @@ def learn_policy(track_name, seed):
     nn_agent = NeuralAgent(track_name=track_name)
     all_observations = []
     all_actions = []
-    for i_iter in range(6):
+    for i_iter in range(10):
         logging.info("Iteration {}".format(i_iter))
         # Learn/Update Neural Policy
+        logging.info("Now we load the weight")
+        try:
+            nn_agent.actor.model.load_weights("./model_1343/actormodel_"+str(seed)+'_'+str(900)+".h5")
+            nn_agent.critic.model.load_weights("./model_1343/criticmodel_"+str(seed)+'_'+str(900)+".h5")
+            nn_agent.actor.target_model.load_weights("./model_1343/actormodel_"+str(seed)+'_'+str(900)+".h5")
+            nn_agent.critic.target_model.load_weights("./model_1343/criticmodel_"+str(seed)+'_'+str(900)+".h5")
+            logging.info("Weight load successfully")
+        except:
+            logging.info("Cannot find the weight")
+
         if i_iter == 0:
             nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=2, seed=seed)
         else:
-            nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=5, seed=seed)
+            nn_agent.update_neural([steer_prog, accel_prog, brake_prog], episode_count=1, seed=seed)
 
         # Collect Trajectories
         observation_list, action_list = nn_agent.collect_data([steer_prog, accel_prog, brake_prog])
@@ -181,9 +207,26 @@ def learn_policy(track_name, seed):
         steer_prog.update_parameters([new_paras[i] for i in ['sp0', 'sp1', 'sp2']], new_paras['spt'])
         accel_prog.update_parameters([new_paras[i] for i in ['ap0', 'ap1', 'ap2']], new_paras['apt'], new_paras['api'], new_paras['apc'])
         brake_prog.update_parameters([new_paras[i] for i in ['bp0', 'bp1', 'bp2']], new_paras['bpt'])
-        
-        programmatic_game(steer_prog, accel_prog, brake_prog)
 
+        _,_, total_reward, total_step, ave_reward, distRaced, lapTimes, avelapTime, ave_sp, max_sp, min_sp = programmatic_game(steer_prog, accel_prog, brake_prog)
+        Program_save['total_reward'].append(total_reward)
+        Program_save['total_step'].append(total_step)
+        Program_save['ave_reward'].append(ave_reward)
+        Program_save['distRaced'].append(distRaced)
+        Program_save['lapTimes'].append(lapTimes)
+        Program_save['avelapTime'].append(avelapTime)
+        Program_save['ave_sp'].append(ave_sp)
+        Program_save['max_sp'].append(max_sp)
+        Program_save['min_sp'].append(min_sp)
+
+    import os
+    import pickle
+    filename = "./Fig/program_save_" + str(seed)
+    dirname = os.path.dirname(filename)
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
+    with open(filename,'wb') as f:
+        pickle.dump(Program_save, f)
     logging.info("Steering Controller" + str(steer_prog.pid_info()))
     logging.info("Acceleration Controller" + str(accel_prog.pid_info()))
     logging.info("Brake Controller" + str(brake_prog.pid_info()))
@@ -196,8 +239,8 @@ def learn_policy(track_name, seed):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--trackfile', default='practice.xml')
-    parser.add_argument('--seed', default=None)
-    parser.add_argument('--logname', default='AdaptiveProgramIPPG_')
+    parser.add_argument('--seed', default=1343)
+    parser.add_argument('--logname', default='IPPG_')
     args = parser.parse_args()
 
     random.seed(args.seed)
