@@ -22,6 +22,10 @@ from utils import *
 import os
 import pickle
 
+def clip(v,lo,hi):
+    if v<lo: return lo
+    elif v>hi: return hi
+    else: return v
 
 class FunctionOU(object):
     def function(self, x, mu, theta, sigma):
