@@ -47,23 +47,6 @@ class ParameterFinder():
         diff_total = -(steer_diff + accel_diff + brake_diff)/float(len(self.actions))
         return diff_total
 
-    def find_distance_paras(self, sp0, sp1, sp2, spt, ap0, ap1, ap2, apt, api, apc, bp0, bp1, bp2, bpt):
-        self.steer.update_parameters([sp0, sp1, sp2], spt)
-        self.accel.update_parameters([ap0, ap1, ap2], apt, api, apc)
-        self.brake.update_parameters([bp0, bp1, bp2], bpt)
-        steer_acts = []
-        accel_acts = []
-        brake_acts = []
-        for window_list in self.inputs:
-            steer_acts.append(clip_to_range(self.steer.pid_execute(window_list), -1, 1))
-            accel_acts.append(clip_to_range(self.accel.pid_execute(window_list), 0, 1))
-            brake_acts.append(clip_to_range(self.brake.pid_execute(window_list), 0, 1))
-        steer_diff = spatial.distance.euclidean(steer_acts, np.array(self.actions)[:, 0])
-        accel_diff = spatial.distance.euclidean(accel_acts, np.array(self.actions)[:, 1])
-        brake_diff = spatial.distance.euclidean(brake_acts, np.array(self.actions)[:, 2])
-        diff_total = -(steer_diff + accel_diff + brake_diff)/float(len(self.actions))
-        return diff_total
-
     def pid_parameters(self, info_list):
         gp_params = {"alpha": 1e-4, "n_restarts_optimizer": 1}  # Optimizer configuration
         logging.info('Optimizing Controller')
