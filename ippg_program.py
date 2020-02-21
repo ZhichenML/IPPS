@@ -178,10 +178,10 @@ def learn_policy(track_name, seed):
         logging.info(pid_ranges)
         new_paras = param_finder.pid_parameters(pid_ranges)
 
-        steer_prog.update_parameters([new_paras['max_params'][i] for i in ['sp0', 'sp1', 'sp2']], new_paras['max_params']['spt'])
-        accel_prog.update_parameters([new_paras['max_params'][i] for i in ['ap0', 'ap1', 'ap2']], new_paras['max_params']['apt'], new_paras['max_params']['api'], new_paras['max_params']['apc'])
-        brake_prog.update_parameters([new_paras['max_params'][i] for i in ['bp0', 'bp1', 'bp2']], new_paras['max_params']['bpt'])
-
+        steer_prog.update_parameters([new_paras[i] for i in ['sp0', 'sp1', 'sp2']], new_paras['spt'])
+        accel_prog.update_parameters([new_paras[i] for i in ['ap0', 'ap1', 'ap2']], new_paras['apt'], new_paras['api'], new_paras['apc'])
+        brake_prog.update_parameters([new_paras[i] for i in ['bp0', 'bp1', 'bp2']], new_paras['bpt'])
+        
         programmatic_game(steer_prog, accel_prog, brake_prog)
 
     logging.info("Steering Controller" + str(steer_prog.pid_info()))
