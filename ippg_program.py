@@ -159,6 +159,7 @@ def learn_policy(track_name, seed):
     programmatic_game(steer_prog, accel_prog, brake_prog, track_name=track_name)
 
     nn_agent = NeuralAgent(track_name=track_name)
+    '''
     logging.info("Now we load the weight")
     try:
         nn_agent.actor.model.load_weights("./model_1343/actormodel_"+str(seed)+'_'+str(900)+".h5")
@@ -167,7 +168,7 @@ def learn_policy(track_name, seed):
         nn_agent.critic.target_model.load_weights("./model_1343/criticmodel_"+str(seed)+'_'+str(900)+".h5")
         logging.info("Weight load successfully")
     except:
-        logging.info("Cannot find the weight")
+        logging.info("Cannot find the weight")'''
 
     all_observations = []
     all_actions = []
